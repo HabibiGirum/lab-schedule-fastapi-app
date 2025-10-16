@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: lab-scheduler
+    env: python
+    plan: starter
+    buildCommand: |
+      python --version
+      curl -LsSf https://astral.sh/uv/install.sh | sh
+      export PATH="$HOME/.local/bin:$PATH"
+      uv sync --frozen
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        value: sqlite:///./lab_scheduler.db
+      - key: RENDER
+        value: "true"
