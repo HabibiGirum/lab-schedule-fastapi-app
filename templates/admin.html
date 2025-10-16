@@ -158,12 +158,60 @@
                       <th>Department</th>
                       <th>Date</th>
                       <th>Active</th>
+                      <th>Usage</th>
                       <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody id="students-summary-table"></tbody>
                 </table>
               </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Edit Usage Modal -->
+      <div class="modal fade" id="editUsageModal" tabindex="-1">
+        <div class="modal-dialog">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">Edit Usage Days</h5>
+              <button
+                type="button"
+                class="btn-close"
+                data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+              <form id="editUsageForm">
+                <input type="hidden" id="editUsageStudentId" />
+                <div class="mb-3">
+                  <label for="editUsageDays" class="form-label"
+                    >Add/Subtract Days</label
+                  >
+                  <input
+                    type="number"
+                    class="form-control"
+                    id="editUsageDays"
+                    placeholder="e.g., 5 or -2" />
+                  <small class="text-muted"
+                    >Use positive to add, negative to subtract.</small
+                  >
+                </div>
+              </form>
+            </div>
+            <div class="modal-footer">
+              <button
+                type="button"
+                class="btn btn-secondary"
+                data-bs-dismiss="modal">
+                Cancel
+              </button>
+              <button
+                type="button"
+                class="btn btn-primary"
+                onclick="submitEditUsage()">
+                Save
+              </button>
             </div>
           </div>
         </div>
@@ -228,6 +276,20 @@
                   class="form-control"
                   id="studentDepartment"
                   placeholder="e.g., Computer Science" />
+              </div>
+              <div class="mb-3">
+                <label for="studentUsageDays" class="form-label"
+                  >Usage Days</label
+                >
+                <input
+                  type="number"
+                  min="1"
+                  class="form-control"
+                  id="studentUsageDays"
+                  placeholder="e.g., 15" />
+                <small class="text-muted"
+                  >Total days this student can use the lab. Optional.</small
+                >
               </div>
               <div class="mb-3">
                 <label for="studentDate" class="form-label">Date</label>

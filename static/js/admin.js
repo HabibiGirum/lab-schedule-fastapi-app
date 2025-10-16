@@ -206,6 +206,8 @@ async function loadStudentsSummary() {
     department: s.department || "",
     date: s.registered_at || s.date || null,
     is_active: typeof s.active === "boolean" ? s.active : null,
+    usage_days_total: s.usage_days_total ?? null,
+    usage_days_remaining: s.usage_days_remaining ?? null,
   }));
 }
 
@@ -236,6 +238,25 @@ function createComputerCard(computer) {
       ? "in-use"
       : "maintenance";
 
+  // Lookup usage info for the assigned student, if any
+  let usageText = "-";
+  const assignedOnText = computer.last_updated
+    ? formatDateTime(computer.last_updated)
+    : "";
+  if (
+    computer.current_user &&
+    Array.isArray(studentsSummary) &&
+    studentsSummary.length > 0
+  ) {
+    const summary = studentsSummary.find(
+      (s) => s.name === computer.current_user
+    );
+    if (summary && summary.usage_days_total != null) {
+      const remaining = summary.usage_days_remaining ?? 0;
+      usageText = `${remaining}/${summary.usage_days_total}`;
+    }
+  }
+
   card.innerHTML = `
         <div class="computer-status ${statusClass}">
             <span class="status-indicator ${statusClass}"></span>
@@ -249,6 +270,8 @@ function createComputerCard(computer) {
                 : `<div class=\"mb-1\"><strong>Assigned to:</strong> ${
                     computer.current_user || ""
                   }</div>
+                   <div class=\"mb-1\"><strong>Usage Left:</strong> ${usageText}</div>
+                   <div class=\"mb-1\"><strong>Assigned On:</strong> ${assignedOnText}</div>
                    <button class=\"btn btn-sm btn-outline-danger\" onclick=\"unassignStudent(${
                      computer.id
                    })\">Unassign</button>`
@@ -371,6 +394,10 @@ function renderStudentsSummaryTable() {
       s.is_active === true
         ? '<span class="badge bg-success">Active</span>'
         : '<span class="badge bg-secondary">Inactive</span>';
+    const usageText =
+      s.usage_days_total != null
+        ? `${s.usage_days_remaining ?? 0}/${s.usage_days_total}`
+        : "-";
     tr.innerHTML = `
       <td>${s.name || ""}</td>
       <td>${s.email || ""}</td>
@@ -378,10 +405,14 @@ function renderStudentsSummaryTable() {
       <td>${s.department || ""}</td>
       <td>${s.date ? formatDateTime(s.date) : ""}</td>
       <td>${activeBadge}</td>
+      <td>${usageText}</td>
       <td>
         <button class="btn btn-sm btn-outline-primary" onclick="toggleStudentActive(${
           s.id
         })">Toggle Active</button>
+        <button class="btn btn-sm btn-outline-secondary ms-1" onclick="openEditUsage(${
+          s.id
+        })">Edit Usage</button>
         <button class="btn btn-sm btn-outline-danger ms-1" onclick="deleteStudent(${
           s.id
         })">Delete</button>
@@ -389,6 +420,48 @@ function renderStudentsSummaryTable() {
     `;
     tbody.appendChild(tr);
   });
+}
+
+function openEditUsage(studentId) {
+  document.getElementById("editUsageStudentId").value = String(studentId);
+  const field = document.getElementById("editUsageDays");
+  if (field) field.value = "";
+  new bootstrap.Modal(document.getElementById("editUsageModal")).show();
+}
+
+async function submitEditUsage() {
+  const studentId = parseInt(
+    document.getElementById("editUsageStudentId").value
+  );
+  const daysVal = document.getElementById("editUsageDays").value;
+  const days = parseInt(daysVal, 10);
+  if (isNaN(days)) {
+    showAlert("Enter a valid number of days.", "warning");
+    return;
+  }
+  try {
+    const res = await fetch(`/api/admin/students/${studentId}/usage`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: getAuthHeader(),
+      },
+      body: JSON.stringify({ days }),
+    });
+    if (!res.ok) {
+      const t = await res.text();
+      showAlert(`Update usage failed: ${t}`, "danger");
+      return;
+    }
+    await loadStudentsSummary();
+    renderStudentsSummaryTable();
+    bootstrap.Modal.getInstance(
+      document.getElementById("editUsageModal")
+    ).hide();
+    showAlert("Usage updated.", "success");
+  } catch (e) {
+    showAlert("Error updating usage.", "danger");
+  }
 }
 
 function renderWeekSchedule() {
@@ -578,6 +651,10 @@ async function addStudent() {
   const date = document.getElementById("studentDate")
     ? document.getElementById("studentDate").value
     : "";
+  const usageDaysRaw = document.getElementById("studentUsageDays")
+    ? document.getElementById("studentUsageDays").value
+    : "";
+  const usage_days = usageDaysRaw ? parseInt(usageDaysRaw) : undefined;
 
   try {
     const response = await fetch("/api/admin/students", {
@@ -593,6 +670,7 @@ async function addStudent() {
         study,
         department,
         date,
+        usage_days,
       }),
     });
 
@@ -758,8 +836,28 @@ async function assignStudent(computerId) {
     showAlert(`Assign failed: ${t}`, "danger");
     return;
   }
+  try {
+    const data = await res.json();
+    if (data && typeof data.usage_days_remaining === "number") {
+      if (data.usage_days_remaining <= 0) {
+        showAlert("This student's usage days have expired.", "warning");
+      } else {
+        showAlert(
+          `Assigned. Remaining usage days: ${data.usage_days_remaining}.`,
+          "success"
+        );
+      }
+    } else {
+      showAlert("Assigned.", "success");
+    }
+  } catch (_) {
+    showAlert("Assigned.", "success");
+  }
   await loadComputers();
   renderComputerGrid();
+  // Refresh summary to reflect usage decrement
+  await loadStudentsSummary();
+  renderStudentsSummaryTable();
 }
 
 async function unassignStudent(computerId) {

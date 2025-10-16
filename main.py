@@ -114,6 +114,10 @@ class Student(Base):
     department = Column(String, nullable=True)
     registered_at = Column(DateTime, nullable=True)
     active = Column(Boolean, default=True)
+    # Usage tracking
+    usage_days_total = Column(Integer, nullable=True)
+    usage_days_remaining = Column(Integer, nullable=True)
+    usage_last_decrement_at = Column(DateTime, nullable=True)
     
     bookings = relationship("Booking", back_populates="student")
 
@@ -150,6 +154,12 @@ def ensure_students_columns():
                 conn.execute(text("ALTER TABLE students ADD COLUMN registered_at DATETIME"))
             if "active" not in columns:
                 conn.execute(text("ALTER TABLE students ADD COLUMN active BOOLEAN DEFAULT 1"))
+            if "usage_days_total" not in columns:
+                conn.execute(text("ALTER TABLE students ADD COLUMN usage_days_total INTEGER"))
+            if "usage_days_remaining" not in columns:
+                conn.execute(text("ALTER TABLE students ADD COLUMN usage_days_remaining INTEGER"))
+            if "usage_last_decrement_at" not in columns:
+                conn.execute(text("ALTER TABLE students ADD COLUMN usage_last_decrement_at DATETIME"))
         except Exception as e:
             # Do not crash app on migration best-effort issues
             print(f"Schema ensure failed: {e}")
@@ -264,6 +274,7 @@ class StudentCreate(BaseModel):
     study: Optional[str] = None
     department: Optional[str] = None
     date: Optional[str] = None  # ISO date string
+    usage_days: Optional[int] = None
 
 class StudentResponse(BaseModel):
     id: int
@@ -274,6 +285,8 @@ class StudentResponse(BaseModel):
     department: Optional[str] = None
     date: Optional[datetime] = None
     active: Optional[bool] = None
+    usage_days_total: Optional[int] = None
+    usage_days_remaining: Optional[int] = None
     
     class Config:
         from_attributes = True
@@ -440,7 +453,9 @@ def create_student_admin(student: StudentCreate, current_user: User = Depends(ge
         student_id=sid,
         study=student.study,
         department=student.department,
-        registered_at=reg_at
+        registered_at=reg_at,
+        usage_days_total=student.usage_days if student.usage_days and student.usage_days > 0 else None,
+        usage_days_remaining=student.usage_days if student.usage_days and student.usage_days > 0 else None
     )
     try:
         db.add(db_student)
@@ -663,6 +678,10 @@ def admin_assign(payload: AssignPayload, current_user: User = Depends(get_admin_
     student = db.query(Student).filter(Student.id == payload.student_id).first()
     if not computer or not student:
         raise HTTPException(status_code=404, detail="Computer or Student not found")
+    # Usage expiry check
+    if student.usage_days_remaining is not None:
+        if student.usage_days_remaining <= 0:
+            raise HTTPException(status_code=400, detail="Student's usage days have expired")
     # Block assignment if linked user is inactive
     if student.user_id:
         u = db.query(User).filter(User.id == student.user_id).first()
@@ -673,11 +692,28 @@ def admin_assign(payload: AssignPayload, current_user: User = Depends(get_admin_
         raise HTTPException(status_code=400, detail="Student is inactive and cannot be assigned")
     if computer.status == "in_use":
         raise HTTPException(status_code=400, detail="Computer already in use")
+    # Decrement usage days once per calendar day max
+    now = get_current_time()
+    if student.usage_days_remaining is not None:
+        should_decrement = False
+        if student.usage_last_decrement_at is None:
+            should_decrement = True
+        else:
+            # Only decrement if new day compared to last decrement (in local tz)
+            last = convert_from_utc(student.usage_last_decrement_at) if student.usage_last_decrement_at.tzinfo is None else student.usage_last_decrement_at
+            if now.date() > last.date():
+                should_decrement = True
+        if should_decrement and student.usage_days_remaining > 0:
+            student.usage_days_remaining -= 1
+            student.usage_last_decrement_at = now
+            if student.usage_days_remaining <= 0:
+                # Auto mark inactive when days exhausted
+                student.active = False
     computer.status = "in_use"
     computer.current_user = student.name
-    computer.last_updated = get_current_time()
+    computer.last_updated = now
     db.commit()
-    return {"assigned": True}
+    return {"assigned": True, "usage_days_remaining": student.usage_days_remaining}
 
 class UnassignPayload(BaseModel):
     computer_id: int
@@ -781,7 +817,9 @@ def get_students_summary(current_user: User = Depends(get_admin_user), db: Sessi
             "study": s.study,
             "department": s.department,
             "date": created.isoformat() if created else None,
-            "is_active": is_active
+            "is_active": is_active,
+            "usage_days_total": s.usage_days_total,
+            "usage_days_remaining": s.usage_days_remaining
         })
     return summary
 
@@ -813,6 +851,55 @@ class StudentTogglePayload(BaseModel):
 @app.post("/api/admin/students/toggle-active")
 def toggle_student_active_body(payload: StudentTogglePayload, current_user: User = Depends(get_admin_user), db: Session = Depends(get_db)):
     return toggle_student_active(payload.student_id, current_user, db)
+
+# Usage management
+class StudentUsageUpdate(BaseModel):
+    days: int  # positive or negative; positive adds days
+
+@app.post("/api/admin/students/{student_id}/usage")
+def update_student_usage(student_id: int, payload: StudentUsageUpdate, current_user: User = Depends(get_admin_user), db: Session = Depends(get_db)):
+    student = db.query(Student).filter(Student.id == student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+    if payload.days == 0:
+        return {
+            "student_id": student_id,
+            "usage_days_total": student.usage_days_total,
+            "usage_days_remaining": student.usage_days_remaining,
+        }
+    # Initialize totals if not set
+    if student.usage_days_total is None:
+        student.usage_days_total = 0
+    if student.usage_days_remaining is None:
+        student.usage_days_remaining = 0
+    student.usage_days_total = max(0, student.usage_days_total + payload.days)
+    student.usage_days_remaining = max(0, student.usage_days_remaining + payload.days)
+    # If days become positive, mark active
+    if student.usage_days_remaining > 0:
+        student.active = True
+    db.commit()
+    return {
+        "student_id": student_id,
+        "usage_days_total": student.usage_days_total,
+        "usage_days_remaining": student.usage_days_remaining,
+    }
+
+# Trailing slash variant
+@app.post("/api/admin/students/{student_id}/usage/")
+def update_student_usage_slash(student_id: int, payload: StudentUsageUpdate, current_user: User = Depends(get_admin_user), db: Session = Depends(get_db)):
+    return update_student_usage(student_id, payload, current_user, db)
+
+class StudentUsageUpdateBody(BaseModel):
+    student_id: int
+    days: int
+
+@app.post("/api/admin/students/usage")
+def update_student_usage_body(payload: StudentUsageUpdateBody, current_user: User = Depends(get_admin_user), db: Session = Depends(get_db)):
+    return update_student_usage(payload.student_id, StudentUsageUpdate(days=payload.days), current_user, db)
+
+@app.post("/api/admin/students/usage/")
+def update_student_usage_body_slash(payload: StudentUsageUpdateBody, current_user: User = Depends(get_admin_user), db: Session = Depends(get_db)):
+    return update_student_usage(payload.student_id, StudentUsageUpdate(days=payload.days), current_user, db)
 
 @app.post("/api/admin/students/toggle-active/")
 def toggle_student_active_body_slash(payload: StudentTogglePayload, current_user: User = Depends(get_admin_user), db: Session = Depends(get_db)):
