@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+# sqlite3
+python-multipart
+jinja2
+python-socketio
+websockets
+pydantic
+python-dateutil
+pytz

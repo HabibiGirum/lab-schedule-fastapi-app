@@ -1,0 +1,187 @@
+/* Custom CSS for Computer Lab Scheduler */
+
+body {
+  background-color: #f8f9fa;
+}
+
+.stat-card {
+  text-align: center;
+  padding: 20px;
+  border-radius: 10px;
+  color: white;
+  margin-bottom: 20px;
+}
+
+.stat-card.available {
+  background: linear-gradient(135deg, #28a745, #20c997);
+}
+
+.stat-card.in-use {
+  background: linear-gradient(135deg, #dc3545, #fd7e14);
+}
+
+.stat-card.maintenance {
+  background: linear-gradient(135deg, #ffc107, #fd7e14);
+}
+
+.stat-card.total {
+  background: linear-gradient(135deg, #007bff, #6610f2);
+}
+
+.stat-card h3 {
+  font-size: 2.5rem;
+  font-weight: bold;
+  margin-bottom: 5px;
+}
+
+.stat-card p {
+  font-size: 1.1rem;
+  margin: 0;
+}
+
+.computer-card {
+  border: 2px solid #dee2e6;
+  border-radius: 10px;
+  padding: 20px;
+  margin-bottom: 20px;
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.computer-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.computer-card.available {
+  border-color: #28a745;
+  background-color: #d4edda;
+}
+
+.computer-card.in-use {
+  border-color: #dc3545;
+  background-color: #f8d7da;
+}
+
+.computer-card.maintenance {
+  border-color: #ffc107;
+  background-color: #fff3cd;
+}
+
+.computer-status {
+  font-size: 1.2rem;
+  font-weight: bold;
+  margin-bottom: 10px;
+}
+
+.computer-status.available {
+  color: #28a745;
+}
+
+.computer-status.in-use {
+  color: #dc3545;
+}
+
+.computer-status.maintenance {
+  color: #ffc107;
+}
+
+.computer-info {
+  font-size: 0.9rem;
+  color: #6c757d;
+}
+
+.status-indicator {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 10px;
+}
+
+.status-indicator.available {
+  background-color: #28a745;
+}
+
+.status-indicator.in-use {
+  background-color: #dc3545;
+}
+
+.status-indicator.maintenance {
+  background-color: #ffc107;
+}
+
+.navbar-brand {
+  font-size: 1.5rem;
+}
+
+.card {
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  border: none;
+}
+
+.card-header {
+  background-color: #fff;
+  border-bottom: 1px solid #dee2e6;
+  font-weight: 600;
+}
+
+.table th {
+  background-color: #f8f9fa;
+  border-top: none;
+  font-weight: 600;
+}
+
+.btn {
+  border-radius: 6px;
+}
+
+.badge {
+  font-size: 0.8rem;
+}
+
+#connection-status {
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+.modal-header {
+  background-color: #f8f9fa;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.form-control,
+.form-select {
+  border-radius: 6px;
+}
+
+.alert {
+  border-radius: 8px;
+  border: none;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .stat-card h3 {
+    font-size: 2rem;
+  }
+
+  .computer-card {
+    padding: 15px;
+  }
+
+  .btn {
+    margin-bottom: 5px;
+  }
+}
